@@ -1,0 +1,40 @@
+[project]
+name = "mnemon"
+version = "0.1.0"
+description = "Agent memory system — persistent memory layer for agentic workflows"
+requires-python = ">=3.11"
+dependencies = [
+    "chromadb>=0.6.0,<0.8.0",
+    "fastmcp>=0.1.0",
+    "pyyaml>=6.0",
+    "httpx>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio",
+    "ruff",
+    "mypy",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mnemon"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
