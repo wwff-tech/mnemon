@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -15,10 +16,10 @@ class ParsedSession:
     source_path: str
     first_event_at: str | None = None
     last_event_at: str | None = None
-    exchanges: list[dict] = field(default_factory=list)
+    exchanges: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _extract_text(content: str | list) -> str:
+def _extract_text(content: str | list[Any]) -> str:
     """Extract plain text from a content field that may be a string or list of blocks."""
     if isinstance(content, str):
         return content
@@ -44,7 +45,7 @@ def _session_id_from_path(path: Path) -> str:
 def parse_claude_jsonl(path: str | Path) -> ParsedSession:
     """Parse a Claude Code JSONL session file into a ParsedSession."""
     path = Path(path)
-    messages: list[dict] = []
+    messages: list[dict[str, Any]] = []
 
     with open(path) as f:
         for line in f:
@@ -59,7 +60,7 @@ def parse_claude_jsonl(path: str | Path) -> ParsedSession:
             if msg_type in ("human", "assistant"):
                 messages.append(obj)
 
-    exchanges: list[dict] = []
+    exchanges: list[dict[str, Any]] = []
     timestamps: list[str] = []
     idx = 0
 
@@ -119,13 +120,13 @@ def parse_claude_ai_json(path: str | Path) -> ParsedSession:
     session_id = data.get("uuid") or _session_id_from_path(path)
 
     # Find the messages array
-    messages: list[dict] = []
+    messages: list[dict[str, Any]] = []
     if isinstance(data.get("chat_messages"), list):
         messages = data["chat_messages"]
     elif isinstance(data.get("messages"), list):
         messages = data["messages"]
 
-    exchanges: list[dict] = []
+    exchanges: list[dict[str, Any]] = []
     timestamps: list[str] = []
     idx = 0
 

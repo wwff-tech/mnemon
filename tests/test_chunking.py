@@ -5,14 +5,12 @@ from __future__ import annotations
 import hashlib
 
 from mnemon.chunking import (
-    Chunk,
     chunk_exchanges,
     chunk_paragraphs,
     compute_chunk_hash,
     estimate_tokens,
     sub_chunk,
 )
-
 
 # ---------------------------------------------------------------------------
 # estimate_tokens

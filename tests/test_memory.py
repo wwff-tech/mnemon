@@ -10,7 +10,6 @@ from mnemon.config import MnemonConfig
 from mnemon.memory import PROTOCOL, MemoryStack
 from mnemon.vectorstore import SearchResult, VectorStore
 
-
 # ── Fake store ──────────────────────────────────────────────────
 
 

@@ -11,11 +11,9 @@ from mnemon.db import Database
 from mnemon.resolver import (
     DomainRequired,
     HeuristicResolver,
-    ResolverResult,
     StrictResolver,
     get_resolver,
 )
-
 
 # ---------------------------------------------------------------------------
 # StrictResolver

@@ -8,10 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from mnemon.api import Memory
-from mnemon.server import mcp, get_memory
 import mnemon.server as server_module
-
+from mnemon.api import Memory
+from mnemon.server import mcp
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mnemon.vectorstore import ChromaStore, SearchResult
+from mnemon.vectorstore import ChromaStore
 
 
 @pytest.fixture()

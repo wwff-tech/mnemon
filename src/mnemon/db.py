@@ -58,6 +58,9 @@ CREATE TABLE review_queue (
 CREATE INDEX idx_review_unresolved ON review_queue(resolved_at)
     WHERE resolved_at IS NULL;
 """,
+    2: """
+ALTER TABLE review_queue ADD COLUMN resolved_topic TEXT;
+""",
 }
 
 
@@ -125,7 +128,8 @@ class Database:
 
     def fetchone(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Row | None:
         """Execute a query and return the first row, or ``None``."""
-        return self._conn.execute(sql, params).fetchone()
+        row: sqlite3.Row | None = self._conn.execute(sql, params).fetchone()
+        return row
 
     def fetchall(self, sql: str, params: Sequence[Any] = ()) -> list[sqlite3.Row]:
         """Execute a query and return all rows."""

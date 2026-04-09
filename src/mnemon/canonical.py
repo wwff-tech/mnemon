@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 from mnemon.parsers import ParsedSession
 
@@ -42,12 +43,13 @@ def write_canonical(session: ParsedSession, canonical_dir: Path) -> Path:
     return out_path
 
 
-def read_canonical(session_id: str, canonical_dir: Path) -> dict | None:
+def read_canonical(session_id: str, canonical_dir: Path) -> dict[str, Any] | None:
     """Read and return the canonical JSON for *session_id*, or ``None`` if missing."""
     path = canonical_dir / f"{session_id}.json"
     if not path.exists():
         return None
-    return json.loads(path.read_text())
+    result: dict[str, Any] = json.loads(path.read_text())
+    return result
 
 
 def list_canonical(canonical_dir: Path) -> list[str]:

@@ -91,7 +91,11 @@ class IngestPipeline:
                 topic=topic,
             )
 
-        # 4. Upsert sources row
+        # 4. Delete stale chunks from a previous ingest of this source
+        if existing:
+            self._delete_chunks_for_session(session.session_id)
+
+        # 5. Upsert sources row
         now = _now_iso()
         self.db.execute(
             """
@@ -116,7 +120,7 @@ class IngestPipeline:
         )
         self.db.commit()
 
-        # 5. Resolve domain / topic
+        # 6. Resolve domain / topic
         metadata: dict[str, Any] = {"source": str(path)}
         if domain:
             metadata["domain"] = domain
@@ -132,18 +136,13 @@ class IngestPipeline:
         domain = resolved.domain
         topic = resolved.topic
 
-        # 6. Chunk
+        # 7. Chunk
         chunks = chunking.chunk_exchanges(session.exchanges)
 
-        # 7. Add chunks, deduplicating by ID
+        # 8. Add all chunks (stale ones already deleted above)
         added = 0
-        skipped = 0
         for chunk in chunks:
             chunk_id = f"{session.session_id}_{chunk.chunk_index}"
-            if self.store.get(chunk_id) is not None:
-                skipped += 1
-                continue
-
             meta: dict[str, Any] = {
                 "domain": domain,
                 "topic": topic or "",
@@ -151,24 +150,26 @@ class IngestPipeline:
                 "timestamp": chunk.metadata.get("timestamp", ""),
                 "importance": importance,
                 "chunk_index": chunk.chunk_index,
-                "exchange_index": chunk.exchange_index if chunk.exchange_index is not None else -1,
+                "exchange_index": (
+                    chunk.exchange_index if chunk.exchange_index is not None else -1
+                ),
                 "session_id": session.session_id,
                 "low_confidence_domain": resolved.low_confidence,
             }
             self.store.add(chunk_id, chunk.text, meta)
             added += 1
 
-        # 8. Update chunk_count
+        # 9. Update chunk_count
         self.db.execute(
             "UPDATE sources SET chunk_count = ? WHERE path = ?",
-            (added + skipped, str(path)),
+            (added, str(path)),
         )
         self.db.commit()
 
         return IngestResult(
             session_id=session.session_id,
             chunks_added=added,
-            chunks_skipped=skipped,
+            chunks_skipped=0,
             domain=domain,
             topic=topic,
         )
@@ -194,18 +195,16 @@ class IngestPipeline:
             resolved = self.resolver.resolve(text, metadata)
             topic = resolved.topic
 
+        # Delete stale chunks from a previous ingest of this file
+        stem = path.stem
+        self._delete_chunks_by_prefix(f"file_{domain}_{stem}_")
+
         # Chunk
         chunks = chunking.chunk_paragraphs(text)
-        stem = path.stem
 
         added = 0
-        skipped = 0
         for chunk in chunks:
             chunk_id = f"file_{domain}_{stem}_{chunk.chunk_index}"
-            if self.store.get(chunk_id) is not None:
-                skipped += 1
-                continue
-
             meta: dict[str, Any] = {
                 "domain": domain,
                 "topic": topic or "",
@@ -219,10 +218,31 @@ class IngestPipeline:
         return IngestResult(
             session_id=None,
             chunks_added=added,
-            chunks_skipped=skipped,
+            chunks_skipped=0,
             domain=domain,
             topic=topic,
         )
+
+    # ------------------------------------------------------------------
+    # Helpers for cleaning stale vectors
+    # ------------------------------------------------------------------
+
+    def _delete_chunks_for_session(self, session_id: str) -> None:
+        """Remove all chunks whose ID starts with ``session_id_``."""
+        metas = self.store.list_metadata()
+        for meta in metas:
+            if meta.get("session_id") == session_id:
+                doc_id = meta.get("id", "")
+                if doc_id:
+                    self.store.delete(doc_id)
+
+    def _delete_chunks_by_prefix(self, prefix: str) -> None:
+        """Remove all chunks whose ID starts with *prefix*."""
+        metas = self.store.list_metadata()
+        for meta in metas:
+            doc_id = meta.get("id", "")
+            if doc_id and doc_id.startswith(prefix):
+                self.store.delete(doc_id)
 
     # ------------------------------------------------------------------
     # Direct text ingestion

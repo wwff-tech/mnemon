@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from mnemon.db import Database
 
@@ -24,7 +25,7 @@ class KnowledgeGraph:
         self,
         name: str,
         type: str,
-        properties: dict | None = None,
+        properties: dict[str, Any] | None = None,
     ) -> int:
         """Insert a new entity and return its id.
 
@@ -43,7 +44,7 @@ class KnowledgeGraph:
         self.db.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
-    def get_entity(self, name: str) -> dict | None:
+    def get_entity(self, name: str) -> dict[str, Any] | None:
         """Look up an entity by *name*.  Returns a dict or ``None``."""
         row = self.db.fetchone("SELECT * FROM entities WHERE name = ?", (name,))
         if row is None:
@@ -60,7 +61,8 @@ class KnowledgeGraph:
         """Return the id of the entity called *name*, creating it if needed."""
         entity = self.get_entity(name)
         if entity is not None:
-            return entity["id"]
+            entity_id: int = entity["id"]
+            return entity_id
         return self.create_entity(name, type)
 
     # ------------------------------------------------------------------
@@ -131,7 +133,7 @@ class KnowledgeGraph:
     # Query methods
     # ------------------------------------------------------------------
 
-    def query(self, entity_name: str, as_of: str | None = None) -> list[dict]:
+    def query(self, entity_name: str, as_of: str | None = None) -> list[dict[str, Any]]:
         """Return triples where *entity_name* appears as subject or object.
 
         When *as_of* is given, only triples valid at that point in time are
@@ -181,7 +183,7 @@ class KnowledgeGraph:
             for r in rows
         ]
 
-    def timeline(self, entity_name: str) -> list[dict]:
+    def timeline(self, entity_name: str) -> list[dict[str, Any]]:
         """Return *all* triples (including invalidated) for *entity_name*,
         ordered chronologically by ``valid_from``."""
         sql = """

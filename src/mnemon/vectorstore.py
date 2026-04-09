@@ -57,19 +57,39 @@ class VectorStore(ABC):
         return len(self.list_metadata())
 
 
+def _default_embedding_function() -> Any:
+    """Return ChromaDB's default embedding function explicitly."""
+    return chromadb.utils.embedding_functions.DefaultEmbeddingFunction()
+
+
 class ChromaStore(VectorStore):
-    """Vector store backed by ChromaDB in embedded persistent mode."""
+    """Vector store backed by ChromaDB in embedded persistent mode.
+
+    Parameters
+    ----------
+    persist_directory:
+        Path to the ChromaDB data directory.
+    collection_name:
+        Name of the collection to use.
+    embedding_function:
+        ChromaDB ``EmbeddingFunction`` instance.  When *None* the default
+        ``all-MiniLM-L6-v2`` function is used.  Pass an explicit function to
+        control the provider (e.g. avoid ONNX/CoreML issues on macOS).
+    """
 
     def __init__(
         self,
         persist_directory: str | Path,
         collection_name: str = "mnemon_chunks",
+        embedding_function: Any = None,
     ) -> None:
         self._client = chromadb.PersistentClient(
             path=str(persist_directory),
         )
+        self._ef = embedding_function or _default_embedding_function()
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
+            embedding_function=self._ef,
         )
 
     def add(self, id: str, text: str, metadata: dict[str, Any]) -> None:
@@ -96,14 +116,14 @@ class ChromaStore(VectorStore):
         distances = results.get("distances") or [[]]
 
         out: list[SearchResult] = []
-        for doc_id, text, meta, dist in zip(
+        for doc_id, doc_text, meta, dist in zip(
             ids[0], documents[0], metadatas[0], distances[0]
         ):
             out.append(
                 SearchResult(
                     id=doc_id,
-                    text=text,
-                    metadata=meta,
+                    text=doc_text,
+                    metadata=dict(meta),
                     score=1.0 - dist,
                 )
             )
@@ -121,8 +141,8 @@ class ChromaStore(VectorStore):
         metadatas = results.get("metadatas") or [{}]
         return SearchResult(
             id=ids[0],
-            text=documents[0],
-            metadata=metadatas[0],
+            text=documents[0] or "",
+            metadata=dict(metadatas[0]),
             score=0.0,
         )
 
@@ -135,7 +155,17 @@ class ChromaStore(VectorStore):
         if where:
             kwargs["where"] = where
         results = self._collection.get(**kwargs)
-        return list(results.get("metadatas") or [])
+        raw = results.get("metadatas") or []
+        # Also inject the document ID into each metadata dict so callers
+        # can look up the full document via store.get(id).
+        ids = results.get("ids") or []
+        out: list[dict[str, Any]] = []
+        for i, meta in enumerate(raw):
+            d = dict(meta)
+            if i < len(ids):
+                d["id"] = ids[i]
+            out.append(d)
+        return out
 
     def count(self) -> int:
         return self._collection.count()

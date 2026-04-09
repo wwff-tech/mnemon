@@ -42,9 +42,10 @@ class ReviewQueue:
         """Mark a review-queue entry as resolved and update chunk metadata."""
         now = datetime.now(timezone.utc).isoformat()
         self._db.execute(
-            "UPDATE review_queue SET resolved_at = ?, resolved_domain = ? "
+            "UPDATE review_queue "
+            "SET resolved_at = ?, resolved_domain = ?, resolved_topic = ? "
             "WHERE chunk_id = ? AND resolved_at IS NULL",
-            (now, domain, chunk_id),
+            (now, domain, topic, chunk_id),
         )
         self._db.commit()
 
@@ -149,10 +150,10 @@ class Memory:
         domain: str | None = None,
         topic: str | None = None,
         n: int = 5,
-    ) -> list:
-        """Search memory. Falls back to L3 (unfiltered) when L2 returns < 2 results."""
+    ) -> list[Any]:
+        """Search memory. Falls back to L3 (unfiltered) only when L2 returns nothing."""
         results = self._memory_stack.search_l2(query, domain=domain, topic=topic, n=n)
-        if len(results) < 2:
+        if not results:
             results = self._memory_stack.search_l3(query, n=n)
         return results
 

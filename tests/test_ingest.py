@@ -5,14 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from mnemon.config import MnemonConfig
 from mnemon.db import Database
 from mnemon.ingest import IngestPipeline, IngestResult
 from mnemon.resolver import HeuristicResolver
 from mnemon.vectorstore import ChromaStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,6 +107,31 @@ class TestIngestConversation:
         assert second.chunks_skipped == 0
 
 
+    def test_reingest_changed_content_updates_vectors(self, tmp_path: Path) -> None:
+        pipeline, _config = _make_pipeline(tmp_path)
+        fixture = _write_jsonl_fixture(tmp_path)
+
+        first = pipeline.ingest_conversation(fixture, domain="engineering")
+        assert first.chunks_added > 0
+
+        # Modify the file content
+        with open(fixture, "a") as f:
+            f.write(json.dumps({
+                "type": "human",
+                "content": "New question about billing?",
+                "timestamp": "2025-06-01T10:02:00Z",
+            }) + "\n")
+            f.write(json.dumps({
+                "type": "assistant",
+                "content": "Billing uses Stripe integration.",
+                "timestamp": "2025-06-01T10:02:05Z",
+            }) + "\n")
+
+        second = pipeline.ingest_conversation(fixture, domain="engineering")
+        # Changed content should re-ingest, not skip
+        assert second.chunks_added > first.chunks_added
+
+
 class TestIngestFile:
     """File ingestion tests."""
 
@@ -132,7 +154,7 @@ class TestIngestFile:
         assert result.domain == "engineering"
 
         # Verify first chunk exists in store
-        chunk_id = f"file_engineering_notes_0"
+        chunk_id = "file_engineering_notes_0"
         doc = pipeline.store.get(chunk_id)
         assert doc is not None
         assert doc.metadata["domain"] == "engineering"

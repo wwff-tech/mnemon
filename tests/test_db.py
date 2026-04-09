@@ -35,14 +35,14 @@ class TestMigrations:
     def test_version_tracking(self, db: Database) -> None:
         rows = db.fetchall("SELECT version FROM schema_migrations ORDER BY version")
         versions = [row["version"] for row in rows]
-        assert versions == [1]
+        assert versions == [1, 2]
 
     def test_version_not_duplicated_on_reopen(self, tmp_path: Path) -> None:
         path = tmp_path / "dup.db"
         Database(path=path).close()
         db = Database(path=path)
         rows = db.fetchall("SELECT version FROM schema_migrations")
-        assert len(rows) == 1
+        assert len(rows) == 2
         db.close()
 
 
