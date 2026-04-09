@@ -1,0 +1,26 @@
+services:
+  mnemon:
+    build: .
+    ports:
+      - "7474:7474"
+    volumes:
+      - mnemon-data:/mnemon
+    environment:
+      - MNEMON_BASE_DIR=/mnemon
+    restart: unless-stopped
+
+  mnemon-dev:
+    build: .
+    ports:
+      - "7474:7474"
+    volumes:
+      - mnemon-data:/mnemon
+      - ./src:/app/src:ro
+    environment:
+      - MNEMON_BASE_DIR=/mnemon
+    restart: unless-stopped
+    profiles:
+      - dev
+
+volumes:
+  mnemon-data:

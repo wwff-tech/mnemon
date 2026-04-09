@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -73,8 +74,13 @@ def load_config(
     """Load config from JSON file, applying defaults and overrides."""
     merged = dict(DEFAULT_CONFIG)
 
+    # MNEMON_BASE_DIR env var takes precedence over default (for containers)
+    env_base = os.environ.get("MNEMON_BASE_DIR")
+    if env_base:
+        merged["base_dir"] = env_base
+
     if config_path is None:
-        config_path = Path(DEFAULT_CONFIG["base_dir"]).expanduser() / "config.json"
+        config_path = Path(merged["base_dir"]).expanduser() / "config.json"
 
     if config_path.exists():
         with open(config_path) as f:
