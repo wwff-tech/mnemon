@@ -56,6 +56,15 @@ class IngestPipeline:
         self.resolver = resolver
         self.config = config
 
+    def _check_lock(self) -> None:
+        """Raise if a backup lock file exists, preventing concurrent ingest."""
+        lock = self.config.base_dir / "backup.lock"
+        if lock.exists():
+            raise RuntimeError(
+                "Ingest blocked: backup in progress (backup.lock exists). "
+                "Call backup_release() when done."
+            )
+
     # ------------------------------------------------------------------
     # Conversation ingestion (JSONL / JSON session files)
     # ------------------------------------------------------------------
@@ -68,6 +77,7 @@ class IngestPipeline:
         importance: float = 0.5,
     ) -> IngestResult:
         """Parse a conversation file, chunk it, and add to the vector store."""
+        self._check_lock()
         path = Path(path)
 
         # 1. Parse
@@ -186,6 +196,7 @@ class IngestPipeline:
         importance: float = 0.5,
     ) -> IngestResult:
         """Read a text file, chunk by paragraphs, and add to the vector store."""
+        self._check_lock()
         path = Path(path)
         text = path.read_text(encoding="utf-8")
 
@@ -258,6 +269,7 @@ class IngestPipeline:
         resolver_mode: str | None = None,
     ) -> str:
         """Ingest a single text chunk directly. Returns the chunk ID."""
+        self._check_lock()
         content_hash = compute_chunk_hash(text)
         chunk_id = f"text_{content_hash[:16]}"
 

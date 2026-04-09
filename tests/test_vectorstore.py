@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from mnemon.vectorstore import ChromaStore
+from mnemon.vectorstore import ChromaStore, get_embedding_function
 
 
 @pytest.fixture()
@@ -95,3 +95,21 @@ class TestSearchSorting:
 class TestGetMissing:
     def test_get_returns_none_for_missing_id(self, store):
         assert store.get("nonexistent") is None
+
+
+class TestEmbeddingProvider:
+    def test_none_embedding_provider(self, tmp_path):
+        ef = get_embedding_function("none")
+        s = ChromaStore(
+            persist_directory=tmp_path / "chroma_none",
+            collection_name="test_none",
+            embedding_function=ef,
+        )
+        s.add("doc1", "hello world", {"topic": "greeting"})
+        results = s.search("hello world")
+        assert len(results) >= 1
+        assert results[0].id == "doc1"
+
+    def test_unknown_provider_raises(self):
+        with pytest.raises(ValueError, match="Unknown embedding provider"):
+            get_embedding_function("bogus")

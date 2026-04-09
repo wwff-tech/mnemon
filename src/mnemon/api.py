@@ -83,7 +83,7 @@ class Memory:
         from mnemon.kg import KnowledgeGraph
         from mnemon.memory import MemoryStack
         from mnemon.resolver import get_resolver
-        from mnemon.vectorstore import ChromaStore
+        from mnemon.vectorstore import ChromaStore, get_embedding_function
 
         # Build config.
         overrides: dict[str, Any] | None = None
@@ -98,6 +98,7 @@ class Memory:
         self._store = ChromaStore(
             persist_directory=self._config.chroma_dir,
             collection_name=self._config.chroma_collection,
+            embedding_function=get_embedding_function(self._config.embedding_provider),
         )
         self._resolver = get_resolver(
             self._config.default_resolver,
@@ -208,6 +209,51 @@ class Memory:
         content_hash = compute_chunk_hash(text)
         chunk_id = f"text_{content_hash[:16]}"
         return self._store.get(chunk_id) is not None
+
+    # ── backup ──────────────────────────────────────────────────
+
+    def backup_prep(self) -> str:
+        """Prepare for backup by quiescing writes.
+
+        Closes the ChromaDB client and database connections, writes a lock
+        file to prevent concurrent ingest, and returns the lock file path.
+        Call backup_release() after the backup completes.
+        """
+        lock_path = self._config.base_dir / "backup.lock"
+        lock_path.write_text(
+            datetime.now(timezone.utc).isoformat() + "\n"
+        )
+        # Close ChromaDB (flushes WAL) and SQLite
+        self._db.close()
+        return str(lock_path)
+
+    def backup_release(self) -> None:
+        """Release the backup lock and reopen connections."""
+        lock_path = self._config.base_dir / "backup.lock"
+        if lock_path.exists():
+            lock_path.unlink()
+        # Reopen connections
+        from mnemon.db import Database
+        from mnemon.ingest import IngestPipeline
+        from mnemon.memory import MemoryStack
+        from mnemon.vectorstore import ChromaStore, get_embedding_function
+
+        self._db = Database(self._config.db_path)
+        self._store = ChromaStore(
+            persist_directory=self._config.chroma_dir,
+            collection_name=self._config.chroma_collection,
+            embedding_function=get_embedding_function(
+                self._config.embedding_provider
+            ) if hasattr(self._config, 'embedding_provider') else None,
+        )
+        # Rebuild dependent components
+        self._memory_stack = MemoryStack(self._store, self._config)
+        self.kg = type(self.kg)(self._db)
+        self._ingest = IngestPipeline(
+            store=self._store, db=self._db,
+            resolver=self._resolver, config=self._config,
+        )
+        self._review = type(self._review)(self._db, self._store)
 
     # ── lifecycle ───────────────────────────────────────────────
 

@@ -62,6 +62,35 @@ def _default_embedding_function() -> Any:
     return chromadb.utils.embedding_functions.DefaultEmbeddingFunction()
 
 
+def get_embedding_function(provider: str) -> Any:
+    """Return a ChromaDB embedding function for the given provider name."""
+    if provider == "default":
+        return _default_embedding_function()
+    if provider == "none":
+        # Deterministic hash-based embeddings for testing.
+        # Produces consistent 384-dim vectors from text content.
+        import hashlib
+        import struct
+
+        class HashEmbeddingFunction:
+            def __call__(self, input: list[str]) -> list[list[float]]:
+                results = []
+                for text in input:
+                    h = hashlib.sha256(text.encode()).digest()
+                    # Expand hash to 384 floats deterministically
+                    floats = []
+                    for i in range(384):
+                        seed = hashlib.sha256(h + struct.pack(">I", i)).digest()[:4]
+                        val = struct.unpack(">f", seed)[0]
+                        # Normalize to [-1, 1]
+                        floats.append(max(-1.0, min(1.0, val)))
+                    results.append(floats)
+                return results
+
+        return HashEmbeddingFunction()
+    raise ValueError(f"Unknown embedding provider: {provider!r}. Use 'default' or 'none'.")
+
+
 class ChromaStore(VectorStore):
     """Vector store backed by ChromaDB in embedded persistent mode.
 

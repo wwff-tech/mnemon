@@ -160,6 +160,42 @@ def mnemon_check_duplicate(text: str) -> str:
     return json.dumps({"is_duplicate": is_dup})
 
 
+# 12 ── review_list ────────────────────────────────────────────────────
+@mcp.tool()
+def mnemon_review_list(limit: int = 20) -> str:
+    """List unresolved low-confidence domain assignments for human review. Returns JSON."""
+    items = get_memory().review.list(limit=limit)
+    return json.dumps(items, default=str)
+
+
+# 13 ── review_resolve ─────────────────────────────────────────────────
+@mcp.tool()
+def mnemon_review_resolve(
+    chunk_id: str,
+    domain: str,
+    topic: str | None = None,
+) -> str:
+    """Confirm or correct a low-confidence domain assignment."""
+    get_memory().review.resolve(chunk_id=chunk_id, domain=domain, topic=topic)
+    return json.dumps({"ok": True, "chunk_id": chunk_id, "domain": domain, "topic": topic})
+
+
+# 14 ── backup_prep ───────────────────────────────────────────────────────
+@mcp.tool()
+def mnemon_backup_prep() -> str:
+    """Quiesce writes and prepare for backup. Returns lock file path."""
+    lock_path = get_memory().backup_prep()
+    return json.dumps({"ok": True, "lock_path": lock_path})
+
+
+# 15 ── backup_release ────────────────────────────────────────────────────
+@mcp.tool()
+def mnemon_backup_release() -> str:
+    """Release backup lock and resume normal operation."""
+    get_memory().backup_release()
+    return json.dumps({"ok": True, "message": "Backup lock released."})
+
+
 # ---------------------------------------------------------------------------
 # Entry-point
 # ---------------------------------------------------------------------------

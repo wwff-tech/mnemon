@@ -44,6 +44,10 @@ EXPECTED_TOOLS = [
     "mnemon_kg_add",
     "mnemon_kg_invalidate",
     "mnemon_check_duplicate",
+    "mnemon_review_list",
+    "mnemon_review_resolve",
+    "mnemon_backup_prep",
+    "mnemon_backup_release",
 ]
 
 
@@ -54,9 +58,9 @@ class TestToolRegistration:
         for name in EXPECTED_TOOLS:
             assert name in registered_names, f"Tool {name!r} not registered"
 
-    def test_exactly_11_tools(self):
+    def test_exactly_15_tools(self):
         tools = asyncio.run(mcp.list_tools())
-        assert len(tools) == 11
+        assert len(tools) == 15
 
 
 # ---------------------------------------------------------------------------
@@ -175,3 +179,38 @@ class TestCheckDuplicate:
         result = server_module.mnemon_check_duplicate(text=text)
         parsed = json.loads(result)
         assert parsed["is_duplicate"] is True
+
+
+class TestReviewList:
+    def test_returns_json_list(self, mem: Memory):
+        result = server_module.mnemon_review_list()
+        parsed = json.loads(result)
+        assert isinstance(parsed, list)
+
+    def test_with_limit(self, mem: Memory):
+        result = server_module.mnemon_review_list(limit=5)
+        parsed = json.loads(result)
+        assert isinstance(parsed, list)
+
+
+class TestReviewResolve:
+    def test_returns_ok_json(self, mem: Memory):
+        result = server_module.mnemon_review_resolve(
+            chunk_id="test-chunk-id",
+            domain="test_domain",
+        )
+        parsed = json.loads(result)
+        assert parsed["ok"] is True
+        assert parsed["chunk_id"] == "test-chunk-id"
+        assert parsed["domain"] == "test_domain"
+        assert parsed["topic"] is None
+
+    def test_with_topic(self, mem: Memory):
+        result = server_module.mnemon_review_resolve(
+            chunk_id="test-chunk-id",
+            domain="test_domain",
+            topic="test_topic",
+        )
+        parsed = json.loads(result)
+        assert parsed["ok"] is True
+        assert parsed["topic"] == "test_topic"

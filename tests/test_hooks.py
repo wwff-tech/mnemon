@@ -1,67 +1,191 @@
-"""Tests for mnemon.hooks — validation and hardening logic."""
+"""Tests for mnemon.hooks — validation, recency scoring, and hardening."""
 
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 
 import pytest
 
-from mnemon.hooks import main, save_hook, validate_session_id
+from mnemon.hooks import (
+    _recency_importance,
+    main,
+    pre_compact_hook,
+    save_hook,
+    validate_session_id,
+)
+
+# ---------------------------------------------------------------------------
+# Session ID validation
+# ---------------------------------------------------------------------------
 
 
 class TestValidateSessionId:
-    def test_valid_alphanumeric(self):
+    def test_valid_alphanumeric(self) -> None:
         assert validate_session_id("abc123") is True
 
-    def test_valid_with_hyphens_and_underscores(self):
+    def test_valid_with_hyphens_and_underscores(self) -> None:
         assert validate_session_id("session-id_01") is True
 
-    def test_valid_single_char(self):
+    def test_valid_single_char(self) -> None:
         assert validate_session_id("a") is True
 
-    def test_valid_max_length(self):
+    def test_valid_max_length(self) -> None:
         assert validate_session_id("a" * 64) is True
 
-    def test_invalid_empty(self):
+    def test_invalid_empty(self) -> None:
         assert validate_session_id("") is False
 
-    def test_invalid_too_long(self):
+    def test_invalid_too_long(self) -> None:
         assert validate_session_id("a" * 65) is False
 
-    def test_invalid_special_chars(self):
+    def test_invalid_special_chars(self) -> None:
         assert validate_session_id("session;rm -rf /") is False
 
-    def test_invalid_spaces(self):
+    def test_invalid_spaces(self) -> None:
         assert validate_session_id("has space") is False
 
-    def test_invalid_dots(self):
+    def test_invalid_dots(self) -> None:
         assert validate_session_id("../etc/passwd") is False
 
 
+# ---------------------------------------------------------------------------
+# Recency importance scoring
+# ---------------------------------------------------------------------------
+
+
+class TestRecencyImportance:
+    def test_single_exchange_gets_cap(self) -> None:
+        assert _recency_importance(0, 1) == 0.8
+
+    def test_first_of_many_gets_low(self) -> None:
+        score = _recency_importance(0, 10)
+        assert score == 0.3
+
+    def test_last_of_many_gets_cap(self) -> None:
+        score = _recency_importance(9, 10)
+        assert score == 0.8
+
+    def test_middle_is_between(self) -> None:
+        score = _recency_importance(5, 10)
+        assert 0.3 < score < 0.8
+
+    def test_monotonically_increasing(self) -> None:
+        scores = [_recency_importance(i, 5) for i in range(5)]
+        assert scores == sorted(scores)
+
+    def test_never_exceeds_cap(self) -> None:
+        for total in range(1, 20):
+            for i in range(total):
+                assert _recency_importance(i, total) <= 0.8
+
+
+# ---------------------------------------------------------------------------
+# Hook hardening — validation errors
+# ---------------------------------------------------------------------------
+
+
 class TestSaveHookHardening:
-    def test_nonexistent_file_logs_error(self, caplog):
+    def test_nonexistent_file_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.ERROR, logger="mnemon.hooks"):
             save_hook("/nonexistent/path/conversation.json", "valid-session")
         assert "Conversation file not found" in caplog.text
 
-    def test_invalid_session_id_returns_early(self, caplog):
+    def test_invalid_session_id_returns_early(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.ERROR, logger="mnemon.hooks"):
             save_hook("/some/path", "invalid session;drop table")
         assert "Invalid session ID" in caplog.text
 
 
+class TestPreCompactHookHardening:
+    def test_nonexistent_file_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.ERROR, logger="mnemon.hooks"):
+            pre_compact_hook("/nonexistent/path/conversation.json", "valid-session")
+        assert "Conversation file not found" in caplog.text
+
+    def test_invalid_session_id_returns_early(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.ERROR, logger="mnemon.hooks"):
+            pre_compact_hook("/some/path", "../traversal")
+        assert "Invalid session ID" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# main() entry point
+# ---------------------------------------------------------------------------
+
+
 class TestMain:
-    def test_wrong_arg_count_exits_1(self, monkeypatch):
+    def test_wrong_arg_count_exits_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["hooks"])
         with pytest.raises(SystemExit, match="1"):
             main()
 
-    def test_too_many_args_exits_1(self, monkeypatch):
+    def test_too_many_args_exits_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("sys.argv", ["hooks", "a", "b", "c", "d"])
         with pytest.raises(SystemExit, match="1"):
             main()
 
-    def test_unknown_event_type_exits_1(self, monkeypatch):
-        monkeypatch.setattr("sys.argv", ["hooks", "unknown_event", "/some/path", "session1"])
+    def test_unknown_event_type_exits_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "sys.argv", ["hooks", "unknown_event", "/some/path", "session1"]
+        )
         with pytest.raises(SystemExit, match="1"):
             main()
+
+
+# ---------------------------------------------------------------------------
+# Subprocess invocation hardening
+# ---------------------------------------------------------------------------
+
+
+class TestSubprocessInvocation:
+    """Test that hooks work correctly when invoked as a subprocess."""
+
+    def test_wrong_args_returns_nonzero(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "mnemon.hooks"],
+            capture_output=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+
+    def test_unknown_event_returns_nonzero(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "mnemon.hooks", "bogus", "/tmp/x", "ses1"],
+            capture_output=True,
+            timeout=10,
+        )
+        assert result.returncode == 1
+
+    def test_missing_file_returns_zero(self) -> None:
+        """Hooks must never block Claude Code — even on error, exit 0."""
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "mnemon.hooks",
+                "stop", "/nonexistent/file.jsonl", "test-session",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        # save_hook logs an error but doesn't sys.exit(1)
+        assert result.returncode == 0
+
+    def test_invalid_session_id_returns_zero(self) -> None:
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "mnemon.hooks",
+                "stop", "/tmp/x", "../../etc/passwd",
+            ],
+            capture_output=True,
+            timeout=10,
+        )
+        assert result.returncode == 0
+
+    def test_subprocess_respects_timeout(self) -> None:
+        """Verify subprocess.run timeout works (caller-side enforcement)."""
+        with pytest.raises(subprocess.TimeoutExpired):
+            subprocess.run(
+                [sys.executable, "-c", "import time; time.sleep(60)"],
+                timeout=1,
+            )

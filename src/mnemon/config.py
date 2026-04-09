@@ -19,6 +19,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "l1_item_max_chars": 200,
     "chunk_target_tokens": 180,
     "chunk_overlap_chars": 100,
+    "embedding_provider": "default",
     "domain_map": {},
     "auth_mode": "disabled",
     "auth_token": "",
@@ -37,6 +38,7 @@ class MnemonConfig:
     l1_item_max_chars: int = 200
     chunk_target_tokens: int = 180
     chunk_overlap_chars: int = 100
+    embedding_provider: str = "default"
     domain_map: dict[str, list[str]] = field(default_factory=dict)
     auth_mode: str = "disabled"  # disabled | permissive | enforcing
     auth_token: str = ""  # bearer token; required when auth_mode != disabled
