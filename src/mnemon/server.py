@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastmcp import FastMCP
+from starlette.middleware import Middleware
 
 from mnemon.api import Memory
+from mnemon.auth import AuthMiddleware, log_auth_startup
 from mnemon.config import load_config
 
 # ---------------------------------------------------------------------------
@@ -163,8 +166,23 @@ def mnemon_check_duplicate(text: str) -> str:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     config = load_config()
-    mcp.run(transport="streamable-http", host=config.bind_host, port=config.bind_port)
+    log_auth_startup(config.auth_mode)
+
+    middleware = [
+        Middleware(
+            AuthMiddleware,
+            auth_mode=config.auth_mode,
+            auth_token=config.auth_token,
+        ),
+    ]
+
+    app = mcp.http_app(transport="streamable-http", middleware=middleware)
+
+    import uvicorn
+
+    uvicorn.run(app, host=config.bind_host, port=config.bind_port)
 
 
 if __name__ == "__main__":

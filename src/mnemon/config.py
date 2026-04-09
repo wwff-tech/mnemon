@@ -20,6 +20,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "chunk_target_tokens": 180,
     "chunk_overlap_chars": 100,
     "domain_map": {},
+    "auth_mode": "disabled",
+    "auth_token": "",
 }
 
 
@@ -36,6 +38,8 @@ class MnemonConfig:
     chunk_target_tokens: int = 180
     chunk_overlap_chars: int = 100
     domain_map: dict[str, list[str]] = field(default_factory=dict)
+    auth_mode: str = "disabled"  # disabled | permissive | enforcing
+    auth_token: str = ""  # bearer token; required when auth_mode != disabled
 
     @property
     def db_path(self) -> Path:
