@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag, or use initial commit if this is the first
+          prev_tag=$(git tag --sort=-creatordate | sed -n '2p')
+          if [ -z "$prev_tag" ]; then
+            range="HEAD"
+          else
+            range="${prev_tag}..HEAD"
+          fi
+          echo "## Changes" > changelog.md
+          echo "" >> changelog.md
+          git log "$range" --pretty=format:"- %s (%h)" --no-merges >> changelog.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: changelog.md
+          generate_release_notes: true
