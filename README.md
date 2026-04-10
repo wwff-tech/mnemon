@@ -94,17 +94,65 @@ uv run python -m mnemon.server
 | `mnemon_kg_add` | Write | Add a knowledge graph triple |
 | `mnemon_kg_invalidate` | Write | End-date a triple |
 | `mnemon_check_duplicate` | Utility | SHA-256 dedup check |
+| `mnemon_review_list` | Utility | Surface low-confidence domain assignments |
+| `mnemon_review_resolve` | Write | Confirm or correct a domain assignment |
+| `mnemon_backup_prep` | Admin | Quiesce writes for backup |
+| `mnemon_backup_release` | Admin | Release backup lock |
 
 ## Claude Code Hooks
 
-Save hook (Stop event) and pre-compact hook (PreCompact event) for automatic memory capture:
+Automatic memory capture on conversation stop and context compaction.
+
+### Setup
+
+Add the hooks to your project's `.claude/settings.json` (or copy from `hooks.example.json`):
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m mnemon.hooks",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m mnemon.hooks",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Claude Code pipes hook context (session ID, transcript path, event name) as JSON to stdin. The hook reads it, ingests the conversation, and exits.
+
+### Manual invocation
 
 ```bash
 python -m mnemon.hooks stop /path/to/conversation.jsonl session_id
 python -m mnemon.hooks pre_compact /path/to/conversation.jsonl session_id
 ```
 
-Hardened: argument list (no `shell=True`), validated session IDs, 30-second timeout, failures logged and swallowed.
+### Importance scoring
+
+- **Save hook (Stop):** Recency-boosted -- recent exchanges score 0.8, oldest score 0.3
+- **Pre-compact hook:** Same recency scoring with a 0.7 floor
+
+Hardened: no `shell=True`, validated session IDs, 30-second timeout, failures logged and swallowed (never blocks Claude Code).
 
 ## Domain Resolution
 
@@ -136,9 +184,18 @@ Two modes:
   "bind_port": 7474,
   "default_resolver": "strict",
   "chroma_collection": "mnemon_chunks",
+  "embedding_provider": "default",
+  "auth_mode": "disabled",
+  "auth_token": "",
   "domain_map": {}
 }
 ```
+
+| Key | Values | Description |
+|-----|--------|-------------|
+| `embedding_provider` | `"default"`, `"none"` | `default` = all-MiniLM-L6-v2 via ONNX. `none` = deterministic hash (testing). |
+| `auth_mode` | `"disabled"`, `"permissive"`, `"enforcing"` | `disabled` = no auth (warning on startup). `permissive` = accepts all, logs unauthenticated. `enforcing` = rejects without valid token. |
+| `auth_token` | string | Bearer token for `permissive`/`enforcing` modes. |
 
 ## Tests
 

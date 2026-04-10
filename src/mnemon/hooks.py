@@ -140,34 +140,76 @@ def _log_event(
 def main() -> None:
     """Entry point for hook subprocess invocation.
 
-    Usage: python -m mnemon.hooks <event_type> <conversation_path> <session_id>
+    Supports two invocation modes:
 
-    Hardened: argument list (no shell=True), validated session ID,
-    30-second timeout enforced by caller, all exceptions caught.
+    **stdin mode** (Claude Code hooks — preferred)::
+
+        echo '{"hook_event_name":"Stop","session_id":"abc","transcript_path":"/p"}' \\
+            | python -m mnemon.hooks
+
+    Claude Code passes a JSON object on stdin with ``hook_event_name``,
+    ``session_id``, and ``transcript_path``.
+
+    **argv mode** (manual/testing)::
+
+        python -m mnemon.hooks <event_type> <conversation_path> <session_id>
+
+    Hardened: no shell=True, validated session IDs, all exceptions caught.
     """
-    if len(sys.argv) != 4:
+    event_type: str | None = None
+    conversation_path: str | None = None
+    session_id: str | None = None
+
+    if len(sys.argv) == 4:
+        # argv mode
+        event_type = sys.argv[1]
+        conversation_path = sys.argv[2]
+        session_id = sys.argv[3]
+    elif len(sys.argv) == 1:
+        # stdin mode — read JSON from Claude Code
+        try:
+            import json
+
+            raw = sys.stdin.read()
+            if not raw.strip():
+                logger.error("Empty stdin — nothing to process")
+                sys.exit(0)
+            data = json.loads(raw)
+            event_type = data.get("hook_event_name", "")
+            session_id = data.get("session_id", "")
+            conversation_path = data.get("transcript_path", "")
+        except Exception:
+            logger.exception("Failed to parse stdin JSON")
+            sys.exit(0)
+    else:
         print(
-            f"Usage: {sys.argv[0]} <event_type> <conversation_path> <session_id>",
+            f"Usage: {sys.argv[0]} [<event_type> <conversation_path> <session_id>]",
             file=sys.stderr,
         )
+        print("  Or pipe Claude Code hook JSON to stdin.", file=sys.stderr)
         sys.exit(1)
 
-    event_type = sys.argv[1]
-    conversation_path = sys.argv[2]
-    session_id = sys.argv[3]
+    # Normalise event names — Claude Code sends "Stop" / "PreCompact",
+    # our handlers use lowercase.
+    event_map: dict[str, str] = {
+        "stop": "stop",
+        "precompact": "pre_compact",
+        "pre_compact": "pre_compact",
+    }
+    normalised = event_map.get((event_type or "").lower().replace("-", ""))
 
     handlers = {
         "stop": save_hook,
         "pre_compact": pre_compact_hook,
     }
 
-    handler = handlers.get(event_type)
+    handler = handlers.get(normalised or "")
     if handler is None:
         logger.error("Unknown event type: %s", event_type)
         sys.exit(1)
 
     try:
-        handler(conversation_path, session_id)
+        handler(conversation_path or "", session_id or "")
     except Exception:
         logger.exception("Hook failed")
         # Never block Claude Code — swallow and exit cleanly

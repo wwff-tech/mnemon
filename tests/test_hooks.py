@@ -115,9 +115,11 @@ class TestPreCompactHookHardening:
 # ---------------------------------------------------------------------------
 
 
-class TestMain:
-    def test_wrong_arg_count_exits_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("sys.argv", ["hooks"])
+class TestMainArgv:
+    """Test argv mode (manual invocation)."""
+
+    def test_two_args_exits_1(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("sys.argv", ["hooks", "stop"])
         with pytest.raises(SystemExit, match="1"):
             main()
 
@@ -139,12 +141,12 @@ class TestMain:
 # ---------------------------------------------------------------------------
 
 
-class TestSubprocessInvocation:
-    """Test that hooks work correctly when invoked as a subprocess."""
+class TestSubprocessArgvMode:
+    """Test argv mode when invoked as a subprocess."""
 
-    def test_wrong_args_returns_nonzero(self) -> None:
+    def test_wrong_arg_count_returns_nonzero(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "mnemon.hooks"],
+            [sys.executable, "-m", "mnemon.hooks", "stop", "only-two"],
             capture_output=True,
             timeout=10,
         )
@@ -168,7 +170,6 @@ class TestSubprocessInvocation:
             capture_output=True,
             timeout=10,
         )
-        # save_hook logs an error but doesn't sys.exit(1)
         assert result.returncode == 0
 
     def test_invalid_session_id_returns_zero(self) -> None:
@@ -182,6 +183,59 @@ class TestSubprocessInvocation:
         )
         assert result.returncode == 0
 
+
+class TestSubprocessStdinMode:
+    """Test stdin mode (Claude Code hook invocation)."""
+
+    def _run_stdin(self, payload: str) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.run(
+            [sys.executable, "-m", "mnemon.hooks"],
+            input=payload.encode(),
+            capture_output=True,
+            timeout=10,
+        )
+
+    def test_stop_event_via_stdin(self) -> None:
+        import json
+        payload = json.dumps({
+            "hook_event_name": "Stop",
+            "session_id": "test-session",
+            "transcript_path": "/nonexistent/file.jsonl",
+        })
+        result = self._run_stdin(payload)
+        # Missing file is not a crash — exits 0
+        assert result.returncode == 0
+
+    def test_precompact_event_via_stdin(self) -> None:
+        import json
+        payload = json.dumps({
+            "hook_event_name": "PreCompact",
+            "session_id": "test-session",
+            "transcript_path": "/nonexistent/file.jsonl",
+        })
+        result = self._run_stdin(payload)
+        assert result.returncode == 0
+
+    def test_unknown_event_via_stdin_exits_1(self) -> None:
+        import json
+        payload = json.dumps({
+            "hook_event_name": "UnknownEvent",
+            "session_id": "test-session",
+            "transcript_path": "/tmp/x",
+        })
+        result = self._run_stdin(payload)
+        assert result.returncode == 1
+
+    def test_empty_stdin_exits_0(self) -> None:
+        result = self._run_stdin("")
+        assert result.returncode == 0
+
+    def test_malformed_json_exits_0(self) -> None:
+        result = self._run_stdin("{not valid json")
+        assert result.returncode == 0
+
+
+class TestSubprocessTimeout:
     def test_subprocess_respects_timeout(self) -> None:
         """Verify subprocess.run timeout works (caller-side enforcement)."""
         with pytest.raises(subprocess.TimeoutExpired):
