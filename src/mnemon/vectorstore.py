@@ -73,19 +73,31 @@ def get_embedding_function(provider: str) -> Any:
         import struct
 
         class HashEmbeddingFunction:
-            def __call__(self, input: list[str]) -> list[list[float]]:
+            is_legacy = True
+
+            def name(self) -> str:
+                return "hash_test"
+
+            def _embed(self, texts: list[str]) -> list[list[float]]:
                 results = []
-                for text in input:
+                for text in texts:
                     h = hashlib.sha256(text.encode()).digest()
-                    # Expand hash to 384 floats deterministically
                     floats = []
                     for i in range(384):
                         seed = hashlib.sha256(h + struct.pack(">I", i)).digest()[:4]
                         val = struct.unpack(">f", seed)[0]
-                        # Normalize to [-1, 1]
                         floats.append(max(-1.0, min(1.0, val)))
                     results.append(floats)
                 return results
+
+            def __call__(self, input: list[str]) -> list[list[float]]:
+                return self._embed(input)
+
+            def embed_documents(self, input: list[str]) -> list[list[float]]:
+                return self._embed(input)
+
+            def embed_query(self, input: list[str]) -> list[list[float]]:
+                return self._embed(input)
 
         return HashEmbeddingFunction()
     raise ValueError(f"Unknown embedding provider: {provider!r}. Use 'default' or 'none'.")
