@@ -1,12 +1,5 @@
 # syntax=docker/dockerfile:1
 
-LABEL org.opencontainers.image.title="Mnemon" \
-      org.opencontainers.image.description="Persistent memory layer for agentic workflows — Python API and HTTP MCP server. No API keys, no cloud dependencies, no LLM calls at runtime." \
-      org.opencontainers.image.url="https://github.com/wwff-tech/mnemon" \
-      org.opencontainers.image.source="https://github.com/wwff-tech/mnemon" \
-      org.opencontainers.image.vendor="wwff-tech" \
-      org.opencontainers.image.licenses="MIT"
-
 FROM python:3.12-slim AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,6 +20,13 @@ RUN uv sync --frozen --no-dev
 
 # Runtime
 FROM python:3.12-slim
+
+LABEL org.opencontainers.image.title="Mnemon" \
+      org.opencontainers.image.description="Persistent memory layer for agentic workflows — Python API and HTTP MCP server. No API keys, no cloud dependencies, no LLM calls at runtime." \
+      org.opencontainers.image.url="https://github.com/wwff-tech/mnemon" \
+      org.opencontainers.image.source="https://github.com/wwff-tech/mnemon" \
+      org.opencontainers.image.vendor="wwff-tech" \
+      org.opencontainers.image.licenses="MIT"
 
 COPY --from=base /app /app
 WORKDIR /app
