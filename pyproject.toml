@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Agent memory system — persistent memory layer for agentic workflows"
 requires-python = ">=3.11"
 dependencies = [
-    "chromadb>=0.6.0,<1.6.0",
+    "chromadb>=1.5.9,<1.6.0",
     "fastmcp>=3.2.4",
     "pyyaml>=6.0",
     "httpx>=0.27.0",
